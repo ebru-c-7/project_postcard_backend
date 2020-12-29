@@ -88,8 +88,9 @@ exports.login = async (req, res, next) => {
       { expiresIn: "1h" }
     );
     console.log("name: ", loadedUser.name);
-    res.status(200).json({ token, name: loadedUser.name });
   } catch (err) {
     return next(new Error("Something went wrong. Please, try again!"));
   }
+
+  res.status(200).json({ token, name: loadedUser.name });
 };

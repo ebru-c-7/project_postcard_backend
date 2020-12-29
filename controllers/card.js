@@ -1,10 +1,31 @@
 const fs = require("fs");
-const path = require('path'); 
+const path = require("path");
+var nodemailer = require("nodemailer");
+var smtpTransport = require("nodemailer-smtp-transport");
+const xoauth2 = require("xoauth2");
 
 const uuid = require("uuid").v4;
 const { validationResult } = require("express-validator");
 
 const Card = require("../models/Card");
+
+const smtpTransporter = nodemailer.createTransport(
+  smtpTransport({
+    service: "Gmail",
+    auth: {
+      xoauth2: xoauth2.createXOAuth2Generator({
+        user: process.env.GMAIL_USER,
+        clientId: process.env.GMAIL_CLIENT_ID,
+        clientSecret: process.env.GMAIL_SECRET,
+        accessToken: process.env.ACCESS_TOKEN,
+        refreshToken: process.env.REFRESH_TOKEN,
+      }),
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+  })
+);
 
 const getRandomStamp = () => {
   const stamps = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -16,7 +37,7 @@ const getRandomStamp = () => {
 exports.getCards = async (req, res, next) => {
   let cards;
   try {
-    cards = await req.user.getCards({include: 'contact'}); //ADD USER TO THE REQ
+    cards = await req.user.getCards({ include: "contact" }); //ADD USER TO THE REQ
     console.log(cards);
   } catch (err) {
     return next(new Error("Something went wrong. Please, try again!"));
@@ -77,10 +98,40 @@ exports.createCard = async (req, res, next) => {
   }
   let message = "Yay! A new card is created!";
 
-  if(card.type) {
+  if (card.type) {
     message = "Yay, a new card is sent!";
   }
-  card = {...card.dataValues, contact: contact};
+  if (card.type) {
+    fs.readFile("./email/email.html", { encoding: "utf-8" }, (err, data) => {
+      let htmlFile = data;
+      let link = `${process.env.FRONT_END}/card/${card.id}/${contact.id}`;
+      htmlFile = htmlFile.replace(/#postcardlink#/g, link);
+
+      if (err) {
+        console.log("Error in reading file: " + err);
+      } else {
+        smtpTransporter.sendMail(
+          {
+            from: process.env.GMAIL_USER,
+            to: contact.email,
+            subject: "Hey, you've got mail!",
+            html: htmlFile,
+          },
+          function (error, info) {
+            if (error) {
+              console.log("Error in sending: ", error);
+            } else {
+              console.log(
+                "Email sent to" + contact.email + ": " + info.response
+              );
+            }
+          }
+        );
+      }
+    });
+  }
+
+  card = { ...card.dataValues, contact: contact };
 
   res.status(200).json({ card, message });
 };
